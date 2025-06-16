@@ -109,6 +109,9 @@ public class App {
 
         printBalance(1,warehouses,freights);
 
+        App mainApp = new App();
+        mainApp.runSimulation();
+
         keyIn.close();
         readConfig.close();
     }
@@ -124,6 +127,11 @@ public class App {
         }
         System.out.printf("%20s  >>  \n", "main");
     }
+
+    public void runSimulation() {
+        
+    }
+
 }
 
 class Warehouse {
@@ -141,15 +149,21 @@ class Warehouse {
     public int getWarehouseBal() {
         return matBalance;
     }
+
+    public void putWarehouse(int takingInMat) {
+        matBalance += takingInMat;
+    }
 }
 
 class Freight {
     String name;
     int maxCap;
+    int holdingUnit;
 
     public Freight(String inName, int inCap) {
         name = inName;
         maxCap = inCap;
+        holdingUnit = maxCap;
     }
 
     public String getName() {
@@ -159,9 +173,17 @@ class Freight {
     public int getmaxCapacity() {
         return maxCap;
     }
+
+    public void resetFreight() {
+        holdingUnit = maxCap;
+    }
+
+    public void freightShip(int takingIn) {
+        holdingUnit += takingIn;
+    }
 }
 
-class SupplierThread {
+class SupplierThread extends Thread{
     String name;
     int supplierMin = 0;
     int supplierMax = 0;
@@ -172,10 +194,6 @@ class SupplierThread {
         supplierMax = inMax;
     }
 
-    public String getName() {
-        return name;
-    }
-
     public int getMinSupplier() {
         return supplierMin;
     }
@@ -183,9 +201,13 @@ class SupplierThread {
     public int getMaxSupplier() {
         return supplierMax;
     }
+
+    public void run() {
+
+    }
 }
 
-class FactoryThread {
+class FactoryThread extends Thread{
     String name;
     int maxProd;
 
@@ -194,11 +216,11 @@ class FactoryThread {
         maxProd = inMaxProd;
     }
 
-    public String getName() {
-        return name;
-    }
-
     public int getFactoryMaxProd() {
         return maxProd;
+    }
+
+    public void run() {
+
     }
 }
