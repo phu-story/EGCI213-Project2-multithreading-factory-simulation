@@ -1,0 +1,5 @@
+days,                  5
+warehouse_num,         3
+freight_num_max,       2, 100
+supplier_num_min_max,  3, 50, 100
+factory_num_max,       3, 80
