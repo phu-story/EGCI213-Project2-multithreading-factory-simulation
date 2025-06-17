@@ -114,7 +114,7 @@ public class App {
         printBalance(1,warehouses,freights);
 
         App mainApp = new App();
-        mainApp.runSimulation(warehouses, freights, supplierThreads, factoryThreads);
+        mainApp.runSimulation(inDay, warehouses, freights, supplierThreads, factoryThreads);
 
         keyIn.close();
         readConfig.close();
@@ -132,12 +132,13 @@ public class App {
         System.out.printf("%20s  >>  \n", "main");
     }
 
-    public void runSimulation(ArrayList<Warehouse> warehouses, ArrayList<Freight> freights, ArrayList<SupplierThread> supplierThreads, ArrayList<FactoryThread> factoryThreads) {
+    public void runSimulation(int inDay, ArrayList<Warehouse> warehouses, ArrayList<Freight> freights, ArrayList<SupplierThread> supplierThreads, ArrayList<FactoryThread> factoryThreads) {
         CountDownLatch waitSupplyLatch = new CountDownLatch(supplierThreads.size());
         CountDownLatch waitFactoryLatch = new CountDownLatch(factoryThreads.size());
         Semaphore SupplierSem = new Semaphore(1);
         Semaphore FactorySem = new Semaphore(1);
         CyclicBarrier FactoryBarrier = new CyclicBarrier(factoryThreads.size());
+        // CyclicBarrier allBarrier = new CyclicBarrier(supplierThreads.size() + factoryThreads.size());
         
 
         for(int i = 0; i < supplierThreads.size(); i++) {
@@ -161,7 +162,57 @@ public class App {
             factoryThreads.get(i).setFactoryBarrier(FactoryBarrier);
             factoryThreads.get(i).start();
         }
-        
+
+        try{
+            Thread.sleep(50);
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        }
+
+        for (int i = 2; i < inDay + 1; i++) {
+            waitSupplyLatch = new CountDownLatch(supplierThreads.size());
+
+            printBalance(i, warehouses, freights);
+            for(int j = 0; j < freights.size(); j++) {
+                freights.get(j).resetFreight();
+            }
+
+            for(int j = 0; j < supplierThreads.size(); j++) {
+                SupplierThread oldSupplierThread = supplierThreads.get(j);
+                SupplierThread newSupplierThread = new SupplierThread(oldSupplierThread.getSupplierName(), oldSupplierThread.supplierMin, oldSupplierThread.supplierMax);
+                newSupplierThread.setSupplierLatch(waitSupplyLatch);
+                newSupplierThread.setWarehouseList(warehouses);
+                newSupplierThread.setSupplierSumaphore(SupplierSem);
+                newSupplierThread.start();
+            }
+
+            try{
+                waitSupplyLatch.await();
+            } catch(InterruptedException e) {
+                System.err.println(e);
+            }
+
+            for(int j = 0; j < factoryThreads.size(); j++){
+                FactoryThread oldFactoryThread = factoryThreads.get(j);
+                FactoryThread newFactoryThread = new FactoryThread(oldFactoryThread.getFactoryName(), oldFactoryThread.maxProd);
+                newFactoryThread.setWarehouseList(warehouses);
+                newFactoryThread.setFactorySemaphore(FactorySem);
+                newFactoryThread.setFactoryFreight(freights);
+
+                waitFactoryLatch = new CountDownLatch(factoryThreads.size());
+                newFactoryThread.setFactoryLatch(waitFactoryLatch);
+                
+                newFactoryThread.setFactoryBarrier(FactoryBarrier);
+                newFactoryThread.start();
+            }
+
+            try{
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.out.println(e);
+            }
+        }
     }
 
 }
@@ -170,6 +221,7 @@ class Warehouse {
     String name;
     int matBalance = 0;
     Semaphore sem = null;
+    int finalAmount = 0;
 
     public Warehouse(String inName, Semaphore inSem) {
         name = inName;
@@ -181,7 +233,7 @@ class Warehouse {
     }
 
     public int getWarehouseBal() {
-        return matBalance;
+        return finalAmount;
     }
 
     public void putWarehouse(int takingInMat) {
@@ -194,6 +246,8 @@ class Warehouse {
         } finally {
             sem.release();
         }
+
+        finalAmount += takingInMat;
     }
 
     public int getMaterial(int inGet) {
