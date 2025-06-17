@@ -372,16 +372,13 @@ class FactoryThread extends Thread{
             System.err.println(e);
         } finally {
             sem.release();
-            // Latch.countDown();
         }
 
         try{
-            // Latch.await();
             barrier.await();
             System.out.printf("%20s  >>  \n", name);
             Thread.sleep(15);
             System.out.printf("%20s  >>  total product to ship = %5d\n", name, holdingMaterial);
-            // holdingMaterial -= Shipped;
         } catch(InterruptedException | BrokenBarrierException e) {
             System.err.println(e);
         }
@@ -406,9 +403,5 @@ class FactoryThread extends Thread{
             System.err.println(e);
         }
 
-        // try{
-        // } catch(InterruptedException e) {
-        //     System.err.println(e);
-        // } 
     }
 }
