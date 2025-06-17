@@ -1,7 +1,9 @@
 package project2;
 
 import java.util.Scanner;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Semaphore;
 import java.io.File;
 import java.io.IOException;
@@ -48,18 +50,20 @@ public class App {
         // Data extration
         int inDay = Integer.parseInt(readConfig.nextLine().split(",")[1].trim());           // #Sim day
 
+        Semaphore WarehouseSemaphore = new Semaphore(1);
         ArrayList<Warehouse> warehouses = new ArrayList<>();
         int length = Integer.parseInt(readConfig.nextLine().split(",")[1].trim());
         for(int i = 0; i < length; i++) {
             String name = "Warehouse_" + i;
-            warehouses.add(new Warehouse(name));
+            warehouses.add(new Warehouse(name, WarehouseSemaphore));
         }
 
+        Semaphore FreightSemaphore = new Semaphore(1);
         ArrayList<Freight> freights = new ArrayList<>();    
         String[] freight = readConfig.nextLine().split(",");
         for(int i = 0; i < Integer.parseInt(freight[1].trim()); i++){
             String name ="Freight_" + i;
-            freights.add(new Freight(name, Integer.parseInt(freight[2].trim())));
+            freights.add(new Freight(name, Integer.parseInt(freight[2].trim()), FreightSemaphore));
         }
 
         ArrayList<SupplierThread> supplierThreads = new ArrayList<>();
@@ -129,23 +133,32 @@ public class App {
     }
 
     public void runSimulation(ArrayList<Warehouse> warehouses, ArrayList<Freight> freights, ArrayList<SupplierThread> supplierThreads, ArrayList<FactoryThread> factoryThreads) {
-        CountDownLatch waitLatch = new CountDownLatch(supplierThreads.size());
+        CountDownLatch waitSupplyLatch = new CountDownLatch(supplierThreads.size());
+        CountDownLatch waitFactoryLatch = new CountDownLatch(factoryThreads.size());
         Semaphore SupplierSem = new Semaphore(1);
+        Semaphore FactorySem = new Semaphore(1);
+        CyclicBarrier FactoryBarrier = new CyclicBarrier(factoryThreads.size());
+        
 
         for(int i = 0; i < supplierThreads.size(); i++) {
-            supplierThreads.get(i).setSupplierLatch(waitLatch);
+            supplierThreads.get(i).setSupplierLatch(waitSupplyLatch);
             supplierThreads.get(i).setWarehouseList(warehouses);
             supplierThreads.get(i).setSupplierSumaphore(SupplierSem);
             supplierThreads.get(i).start();
         }
 
         try{
-            waitLatch.await();
+            waitSupplyLatch.await();
         } catch(InterruptedException e) {
             System.err.println(e);
         }
         
         for(int i = 0; i < factoryThreads.size(); i++) {
+            factoryThreads.get(i).setWarehouseList(warehouses);
+            factoryThreads.get(i).setFactorySemaphore(FactorySem);
+            factoryThreads.get(i).setFactoryFreight(freights);
+            factoryThreads.get(i).setFactoryLatch(waitFactoryLatch);
+            factoryThreads.get(i).setFactoryBarrier(FactoryBarrier);
             factoryThreads.get(i).start();
         }
         
@@ -156,9 +169,11 @@ public class App {
 class Warehouse {
     String name;
     int matBalance = 0;
+    Semaphore sem = null;
 
-    public Warehouse(String inName) {
+    public Warehouse(String inName, Semaphore inSem) {
         name = inName;
+        sem = inSem;
     }
 
     public String getName() {
@@ -170,20 +185,48 @@ class Warehouse {
     }
 
     public void putWarehouse(int takingInMat) {
-        matBalance += takingInMat;
-        System.out.printf("put %5d materials %15s balance = %5d\n", takingInMat, name, matBalance);
+        try{
+            sem.acquire();
+            matBalance += takingInMat;
+            System.out.printf("%-4s %5d materials %15s balance = %5d\n", "put",takingInMat, name, matBalance);
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+        }
+    }
+
+    public int getMaterial(int inGet) {
+        try{
+            sem.acquire();
+            if (matBalance <= inGet) {
+                inGet = matBalance;
+                matBalance = 0;
+                System.out.printf("%-4s %5d meterials %15s balance = %5d\n", "get",inGet, name, matBalance);
+            } else {
+                inGet = matBalance - inGet;
+                matBalance -= inGet;
+                System.out.printf("%-4s %5d meterials %15s balance = %5d\n", "get",inGet, name, matBalance);
+            }
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+        }
+        return inGet;
     }
 }
 
 class Freight {
     String name;
     int maxCap;
-    int holdingUnit;
+    int holdingUnit = 0;
+    Semaphore sem = null;
 
-    public Freight(String inName, int inCap) {
+    public Freight(String inName, int inCap, Semaphore inSem) {
         name = inName;
         maxCap = inCap;
-        holdingUnit = maxCap;
+        sem = inSem;
     }
 
     public String getName() {
@@ -198,8 +241,25 @@ class Freight {
         holdingUnit = maxCap;
     }
 
-    public void freightShip(int takingIn) {
-        holdingUnit += takingIn;
+    public int freightShip(int takingIn) {
+        int returningVal = 0;
+        try {
+            sem.acquire();
+            if (holdingUnit + takingIn >= maxCap) {
+                takingIn = maxCap - holdingUnit;
+                holdingUnit = maxCap;
+                returningVal = (holdingUnit + takingIn) - maxCap;
+            } else {
+                holdingUnit += takingIn;
+            }
+            System.out.printf("ship %5d meterials %13s remaining capacity = %5d\n", takingIn, name, (maxCap-holdingUnit));
+    
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+        }
+        return returningVal;
     }
 }
 
@@ -260,14 +320,35 @@ class FactoryThread extends Thread{
     String name;
     int maxProd;
     CountDownLatch Latch = null;
+    int ThreadSize = 0;
+    ArrayList<Warehouse> warehouseList;
+    ArrayList<Freight> freightList;
+    Semaphore sem = null;
+    CyclicBarrier barrier = null;
     
     public FactoryThread(String inName, int inMaxProd) {
         name = inName;
         maxProd = inMaxProd;
     }
 
+    public void setFactoryBarrier(CyclicBarrier inBarrier) {
+        barrier = inBarrier;
+    }
+
+    public void setFactorySemaphore(Semaphore inSem) {
+        sem = inSem;
+    }
+    
+    public void setFactoryFreight(ArrayList<Freight> inList) {
+        freightList = inList;
+    }
+    public void setWarehouseList(ArrayList<Warehouse> inList){
+        warehouseList = inList;
+    }
+
     public void setFactoryLatch(CountDownLatch waitSize) {
         Latch = waitSize;
+        ThreadSize = (int) Latch.getCount();
     }
     
     public String getFactoryName() {
@@ -279,7 +360,55 @@ class FactoryThread extends Thread{
     }
 
     public void run() {
-        System.out.printf("%20s  >>  \n", name);
+        double rand = Math.random();
+        int holdingMaterial = 0;
+        int unShipped = 0;
 
+        try{
+            sem.acquire();
+            System.out.printf("%20s  >>  ", name);
+            holdingMaterial = warehouseList.get((int) (rand * warehouseList.size())).getMaterial(maxProd);
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+            // Latch.countDown();
+        }
+
+        try{
+            // Latch.await();
+            barrier.await();
+            System.out.printf("%20s  >>  \n", name);
+            Thread.sleep(15);
+            System.out.printf("%20s  >>  total product to ship = %5d\n", name, holdingMaterial);
+            // holdingMaterial -= Shipped;
+        } catch(InterruptedException | BrokenBarrierException e) {
+            System.err.println(e);
+        }
+
+        rand = Math.random();
+
+        try{
+            barrier.await();
+            sem.acquire();
+            System.out.printf("%20s  >>  ", name);
+            unShipped = freightList.get((int) (rand * freightList.size())).freightShip(holdingMaterial);
+        } catch(InterruptedException | BrokenBarrierException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+        }
+        
+        try{
+            Thread.sleep(5);
+            System.out.printf("%20s  >>  unshipped product = %5d\n", name, unShipped);
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        }
+
+        // try{
+        // } catch(InterruptedException e) {
+        //     System.err.println(e);
+        // } 
     }
 }
