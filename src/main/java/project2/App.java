@@ -1,6 +1,8 @@
 package project2;
 
 import java.util.Scanner;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -8,9 +10,7 @@ import java.util.ArrayList;
 /* 
    Made with ♥ by,
 
-   Yoswaris Lawpaiboon,  6681170
    Pasin Piyavej,        6681187
-   Praepilai Phetsamsri, 6681374
    
 */
 
@@ -55,7 +55,7 @@ public class App {
             warehouses.add(new Warehouse(name));
         }
 
-        ArrayList<Freight> freights = new ArrayList<>();
+        ArrayList<Freight> freights = new ArrayList<>();    
         String[] freight = readConfig.nextLine().split(",");
         for(int i = 0; i < Integer.parseInt(freight[1].trim()); i++){
             String name ="Freight_" + i;
@@ -68,7 +68,7 @@ public class App {
             String name = "SupplierThread_" + i;
             supplierThreads.add(new SupplierThread(
                 name, 
-                Integer.parseInt(supplier[2].trim()), 
+                Integer.parseInt(supplier[2].trim()),   
                 Integer.parseInt(supplier[3].trim())
             ));
         }
@@ -95,13 +95,13 @@ public class App {
         System.out.printf("\n%20s  >>  %-25s : max = %d", "main", "Freights capacity", freights.get(0).getmaxCapacity());
         System.out.printf("\n%20s  >>  %-25s : ", "main", "SupplierThreads");
         for(int i = 0; i < supplierThreads.size(); i++) {
-            System.out.print(supplierThreads.get(i).getName());
+            System.out.print(supplierThreads.get(i).getSupplierName());
             if (i < supplierThreads.size() - 1) System.out.print(", ");
         }
         System.out.printf("\n%20s  >>  %-25s : min = %-3d, max = %-3d", "main", "Daily supply", supplierThreads.get(0).getMinSupplier(), supplierThreads.get(0).getMaxSupplier());
         System.out.printf("\n%20s  >>  %-25s : ", "main", "FactoryThreads");
         for(int i = 0; i < factoryThreads.size(); i++) {
-            System.out.print(factoryThreads.get(i).getName());
+            System.out.print(factoryThreads.get(i).getFactoryName());
             if (i < factoryThreads.size() - 1) System.out.print(", ");
         }
         System.out.printf("\n%20s  >>  %-25s : max = %-3d", "main", "Daily production", factoryThreads.get(0).getFactoryMaxProd());
@@ -110,7 +110,7 @@ public class App {
         printBalance(1,warehouses,freights);
 
         App mainApp = new App();
-        mainApp.runSimulation();
+        mainApp.runSimulation(warehouses, freights, supplierThreads, factoryThreads);
 
         keyIn.close();
         readConfig.close();
@@ -128,7 +128,26 @@ public class App {
         System.out.printf("%20s  >>  \n", "main");
     }
 
-    public void runSimulation() {
+    public void runSimulation(ArrayList<Warehouse> warehouses, ArrayList<Freight> freights, ArrayList<SupplierThread> supplierThreads, ArrayList<FactoryThread> factoryThreads) {
+        CountDownLatch waitLatch = new CountDownLatch(supplierThreads.size());
+        Semaphore SupplierSem = new Semaphore(1);
+
+        for(int i = 0; i < supplierThreads.size(); i++) {
+            supplierThreads.get(i).setSupplierLatch(waitLatch);
+            supplierThreads.get(i).setWarehouseList(warehouses);
+            supplierThreads.get(i).setSupplierSumaphore(SupplierSem);
+            supplierThreads.get(i).start();
+        }
+
+        try{
+            waitLatch.await();
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        }
+        
+        for(int i = 0; i < factoryThreads.size(); i++) {
+            factoryThreads.get(i).start();
+        }
         
     }
 
@@ -152,6 +171,7 @@ class Warehouse {
 
     public void putWarehouse(int takingInMat) {
         matBalance += takingInMat;
+        System.out.printf("put %5d materials %15s balance = %5d\n", takingInMat, name, matBalance);
     }
 }
 
@@ -187,11 +207,30 @@ class SupplierThread extends Thread{
     String name;
     int supplierMin = 0;
     int supplierMax = 0;
+    CountDownLatch Latch = null;
+    ArrayList<Warehouse> warehouseList;
+    Semaphore sem = null;
 
     public SupplierThread(String inName, int inMin, int inMax){
         name = inName;
         supplierMin = inMin;
         supplierMax = inMax;
+    }
+
+    public void setSupplierSumaphore(Semaphore inSem){
+        sem = inSem;
+    }
+
+    public void setWarehouseList(ArrayList<Warehouse> inList){
+        warehouseList = inList;
+    }
+
+    public void setSupplierLatch(CountDownLatch waitSize) {
+        Latch = waitSize;
+    }
+
+    public String getSupplierName() {
+        return name;
     }
 
     public int getMinSupplier() {
@@ -203,17 +242,36 @@ class SupplierThread extends Thread{
     }
 
     public void run() {
-
+        double rand = Math.random();
+        try{
+            sem.acquire();
+            System.out.printf("%20s  >>  ", name);
+            warehouseList.get((int) (rand * warehouseList.size())).putWarehouse((int) (rand*(supplierMax-supplierMin + 1) + supplierMin));
+        } catch(InterruptedException e) {
+            System.err.println(e);
+        } finally {
+            sem.release();
+            Latch.countDown();
+        }
     }
 }
 
 class FactoryThread extends Thread{
     String name;
     int maxProd;
-
+    CountDownLatch Latch = null;
+    
     public FactoryThread(String inName, int inMaxProd) {
         name = inName;
         maxProd = inMaxProd;
+    }
+
+    public void setFactoryLatch(CountDownLatch waitSize) {
+        Latch = waitSize;
+    }
+    
+    public String getFactoryName() {
+        return name;
     }
 
     public int getFactoryMaxProd() {
@@ -221,6 +279,7 @@ class FactoryThread extends Thread{
     }
 
     public void run() {
+        System.out.printf("%20s  >>  \n", name);
 
     }
 }
