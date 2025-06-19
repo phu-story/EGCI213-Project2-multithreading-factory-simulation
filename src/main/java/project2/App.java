@@ -1,10 +1,7 @@
 package project2;
 
 import java.util.Scanner;
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -84,6 +81,7 @@ public class App {
             factoryThreads.add(new FactoryThread(name, Integer.parseInt(factory[2].trim())));
         }
 
+        // First Line program's output
         System.out.printf("%20s  >>  ==================== Parameters ====================\n", "main");
         System.out.printf("%20s  >>  %-25s : %d\n", "main", "Days of simulation", inDay);
         System.out.printf("%20s  >>  %-25s : ", "main", "Warehouses");
@@ -111,8 +109,6 @@ public class App {
         System.out.printf("\n%20s  >>  %-25s : max = %-3d", "main", "Daily production", factoryThreads.get(0).getFactoryMaxProd());
         System.out.printf("\n%20s  >>  \n", "main");
 
-        printBalance(1,warehouses,freights);
-
         App mainApp = new App();
         mainApp.runSimulation(inDay, warehouses, freights, supplierThreads, factoryThreads);
 
@@ -121,6 +117,7 @@ public class App {
     }
 
     public static void printBalance(int goingDay, ArrayList<Warehouse> warehouseList, ArrayList<Freight> freightsList) {
+        System.out.printf("%20s  >>  \n", "main");
         System.out.printf("%20s  >>  ====================================================\n", "main");
         System.out.printf("%20s  >>  Day %d\n", "main", goingDay);
         for(int i = 0; i < warehouseList.size(); i++) {
@@ -129,88 +126,55 @@ public class App {
         for(int i = 0; i < freightsList.size(); i++) {
             System.out.printf("%20s  >>  %-25s = %5d\n", "main", freightsList.get(i).getName() + "  capacity", freightsList.get(i).getmaxCapacity());
         }
-        System.out.printf("%20s  >>  \n", "main");
     }
 
     public void runSimulation(int inDay, ArrayList<Warehouse> warehouses, ArrayList<Freight> freights, ArrayList<SupplierThread> supplierThreads, ArrayList<FactoryThread> factoryThreads) {
         CountDownLatch waitSupplyLatch = new CountDownLatch(supplierThreads.size());
-        CountDownLatch waitFactoryLatch = new CountDownLatch(factoryThreads.size());
         Semaphore SupplierSem = new Semaphore(1);
         Semaphore FactorySem = new Semaphore(1);
         CyclicBarrier FactoryBarrier = new CyclicBarrier(factoryThreads.size());
-        // CyclicBarrier allBarrier = new CyclicBarrier(supplierThreads.size() + factoryThreads.size());
         
+        for (int a = 1; a < inDay + 1; a++) {
+            printBalance(a, warehouses, freights);
 
-        for(int i = 0; i < supplierThreads.size(); i++) {
-            supplierThreads.get(i).setSupplierLatch(waitSupplyLatch);
-            supplierThreads.get(i).setWarehouseList(warehouses);
-            supplierThreads.get(i).setSupplierSumaphore(SupplierSem);
-            supplierThreads.get(i).start();
-        }
+            
+            ArrayList<Thread> supplierThreadInstances = new ArrayList<>();
+            for(int i = 0; i < supplierThreads.size(); i++) {
+                supplierThreads.get(i).setSupplierLatch(waitSupplyLatch);
+                supplierThreads.get(i).setWarehouseList(warehouses);
+                supplierThreads.get(i).setSupplierSemaphore(SupplierSem);
 
-        try{
-            waitSupplyLatch.await();
-        } catch(InterruptedException e) {
-            System.err.println(e);
-        }
-        
-        for(int i = 0; i < factoryThreads.size(); i++) {
-            factoryThreads.get(i).setWarehouseList(warehouses);
-            factoryThreads.get(i).setFactorySemaphore(FactorySem);
-            factoryThreads.get(i).setFactoryFreight(freights);
-            factoryThreads.get(i).setFactoryLatch(waitFactoryLatch);
-            factoryThreads.get(i).setFactoryBarrier(FactoryBarrier);
-            factoryThreads.get(i).start();
-        }
-
-        try{
-            Thread.sleep(50);
-        } catch(InterruptedException e) {
-            System.err.println(e);
-        }
-
-        for (int i = 2; i < inDay + 1; i++) {
-            waitSupplyLatch = new CountDownLatch(supplierThreads.size());
-
-            printBalance(i, warehouses, freights);
-            for(int j = 0; j < freights.size(); j++) {
-                freights.get(j).resetFreight();
+                Thread supplierThreadPool = new Thread(supplierThreads.get(i));
+                supplierThreadInstances.add(supplierThreadPool);
+                supplierThreadPool.start();
             }
 
-            for(int j = 0; j < supplierThreads.size(); j++) {
-                SupplierThread oldSupplierThread = supplierThreads.get(j);
-                SupplierThread newSupplierThread = new SupplierThread(oldSupplierThread.getSupplierName(), oldSupplierThread.supplierMin, oldSupplierThread.supplierMax);
-                newSupplierThread.setSupplierLatch(waitSupplyLatch);
-                newSupplierThread.setWarehouseList(warehouses);
-                newSupplierThread.setSupplierSumaphore(SupplierSem);
-                newSupplierThread.start();
-            }
-
-            try{
-                waitSupplyLatch.await();
-            } catch(InterruptedException e) {
-                System.err.println(e);
-            }
-
-            for(int j = 0; j < factoryThreads.size(); j++){
-                FactoryThread oldFactoryThread = factoryThreads.get(j);
-                FactoryThread newFactoryThread = new FactoryThread(oldFactoryThread.getFactoryName(), oldFactoryThread.maxProd);
-                newFactoryThread.setWarehouseList(warehouses);
-                newFactoryThread.setFactorySemaphore(FactorySem);
-                newFactoryThread.setFactoryFreight(freights);
-
-                waitFactoryLatch = new CountDownLatch(factoryThreads.size());
-                newFactoryThread.setFactoryLatch(waitFactoryLatch);
-                
-                newFactoryThread.setFactoryBarrier(FactoryBarrier);
-                newFactoryThread.start();
-            }
-
-            try{
-                Thread.sleep(150);
+            try {
+                for (Thread supplierThreadPool : supplierThreadInstances) {
+                    supplierThreadPool.join();
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                System.out.println(e);
+            }
+            
+            ArrayList<Thread> factoryThreadInstances = new ArrayList<>();
+            for(int i = 0; i < factoryThreads.size(); i++) {
+                factoryThreads.get(i).setWarehouseList(warehouses);
+                factoryThreads.get(i).setFactorySemaphore(FactorySem);
+                factoryThreads.get(i).setFactoryFreight(freights);
+                factoryThreads.get(i).setFactoryBarrier(FactoryBarrier);
+
+                Thread factoryThreadPool = new Thread(factoryThreads.get(i));
+                factoryThreadInstances.add(factoryThreadPool);
+                factoryThreadPool.start();
+            }
+            
+            try {
+                for (Thread factoryThreadPool : factoryThreadInstances) {
+                    factoryThreadPool.join();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }
@@ -218,10 +182,10 @@ public class App {
 }
 
 class Warehouse {
-    String name;
-    int matBalance = 0;
-    Semaphore sem = null;
-    int finalAmount = 0;
+    protected String name;
+    protected Semaphore sem = null;
+    private int matBalance = 0;
+    private int finalAmount = 0;
 
     public Warehouse(String inName, Semaphore inSem) {
         name = inName;
@@ -258,7 +222,6 @@ class Warehouse {
                 matBalance = 0;
                 System.out.printf("%-4s %5d meterials %15s balance = %5d\n", "get",inGet, name, matBalance);
             } else {
-                inGet = matBalance - inGet;
                 matBalance -= inGet;
                 System.out.printf("%-4s %5d meterials %15s balance = %5d\n", "get",inGet, name, matBalance);
             }
@@ -272,10 +235,11 @@ class Warehouse {
 }
 
 class Freight {
-    String name;
-    int maxCap;
-    int holdingUnit = 0;
-    Semaphore sem = null;
+    protected String name;
+    protected int maxCap;
+    private int holdingUnit = 0;
+    private static Semaphore sem = null;
+    private int unShippedUnit = 0;
 
     public Freight(String inName, int inCap, Semaphore inSem) {
         name = inName;
@@ -292,38 +256,39 @@ class Freight {
     }
 
     public void resetFreight() {
-        holdingUnit = maxCap;
+        holdingUnit = 0;
+        unShippedUnit = 0;
     }
 
     public int freightShip(int takingIn) {
-        int returningVal = 0;
         try {
             sem.acquire();
             if (holdingUnit + takingIn >= maxCap) {
-                takingIn = maxCap - holdingUnit;
+                int shipped = maxCap - holdingUnit;
+                unShippedUnit = takingIn - shipped;
                 holdingUnit = maxCap;
-                returningVal = (holdingUnit + takingIn) - maxCap;
+                System.out.printf("ship %5d meterials %13s remaining capacity = %5d\n", shipped, name, (maxCap - holdingUnit));
             } else {
                 holdingUnit += takingIn;
+                System.out.printf("ship %5d meterials %13s remaining capacity = %5d\n", takingIn, name, (maxCap - holdingUnit));
             }
-            System.out.printf("ship %5d meterials %13s remaining capacity = %5d\n", takingIn, name, (maxCap-holdingUnit));
     
         } catch(InterruptedException e) {
             System.err.println(e);
         } finally {
             sem.release();
         }
-        return returningVal;
+        return unShippedUnit;
     }
 }
 
-class SupplierThread extends Thread{
-    String name;
-    int supplierMin = 0;
-    int supplierMax = 0;
-    CountDownLatch Latch = null;
-    ArrayList<Warehouse> warehouseList;
-    Semaphore sem = null;
+class SupplierThread implements Runnable{
+    protected String name;
+    protected int supplierMin = 0;
+    protected int supplierMax = 0;
+    private CountDownLatch Latch = null;
+    private ArrayList<Warehouse> warehouseList;
+    private Semaphore sem = null;
 
     public SupplierThread(String inName, int inMin, int inMax){
         name = inName;
@@ -331,7 +296,7 @@ class SupplierThread extends Thread{
         supplierMax = inMax;
     }
 
-    public void setSupplierSumaphore(Semaphore inSem){
+    public void setSupplierSemaphore(Semaphore inSem){
         sem = inSem;
     }
 
@@ -370,15 +335,13 @@ class SupplierThread extends Thread{
     }
 }
 
-class FactoryThread extends Thread{
-    String name;
-    int maxProd;
-    CountDownLatch Latch = null;
-    int ThreadSize = 0;
-    ArrayList<Warehouse> warehouseList;
-    ArrayList<Freight> freightList;
-    Semaphore sem = null;
-    CyclicBarrier barrier = null;
+class FactoryThread implements Runnable{
+    protected String name;
+    protected int maxProd;
+    private ArrayList<Warehouse> warehouseList;
+    private ArrayList<Freight> freightList;
+    private Semaphore sem = null;
+    private CyclicBarrier barrier = null;
     
     public FactoryThread(String inName, int inMaxProd) {
         name = inName;
@@ -398,11 +361,6 @@ class FactoryThread extends Thread{
     }
     public void setWarehouseList(ArrayList<Warehouse> inList){
         warehouseList = inList;
-    }
-
-    public void setFactoryLatch(CountDownLatch waitSize) {
-        Latch = waitSize;
-        ThreadSize = (int) Latch.getCount();
     }
     
     public String getFactoryName() {
@@ -444,7 +402,7 @@ class FactoryThread extends Thread{
             sem.acquire();
             System.out.printf("%20s  >>  ", name);
             unShipped = freightList.get((int) (rand * freightList.size())).freightShip(holdingMaterial);
-        } catch(InterruptedException | BrokenBarrierException e) {
+        } catch(InterruptedException | BrokenBarrierException e) { // 
             System.err.println(e);
         } finally {
             sem.release();
