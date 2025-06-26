@@ -15,7 +15,7 @@ import java.util.ArrayList;
 
 public class App {
     public static void main(String[] args) throws Exception {
-        //  Path work at dev path, change to src/main/java/project2_6681187/config_1.txt when deliver project
+        //  Path work at dev phase, change to src/main/java/project2_6681187/config_1.txt when deliver project
         File readingPath = new File("src/main/java/project2/config_1.txt");
         Scanner readConfig = null;
         Scanner keyIn = new Scanner(System.in);
@@ -82,34 +82,18 @@ public class App {
         }
 
         // First Line program's output
+        App mainApp = new App();
         System.out.printf("%20s  >>  ==================== Parameters ====================\n", "main");
         System.out.printf("%20s  >>  %-25s : %d\n", "main", "Days of simulation", inDay);
-        System.out.printf("%20s  >>  %-25s : ", "main", "Warehouses");
-        for(int i = 0; i < warehouses.size(); i++) {
-            System.out.print(warehouses.get(i).getName());
-            if (i < warehouses.size() - 1) System.out.print(", ");
-        }
-        System.out.printf("\n%20s  >>  %-25s : ", "main", "Freights");
-        for(int i = 0; i < freights.size(); i++) {
-            System.out.print(freights.get(i).getName());
-            if (i < freights.size() - 1) System.out.print(", ");
-        }
+        System.out.printf("%20s  >>  %-25s : %s", "main", "Warehouses", methodsPool.arrListToString(warehouses));
+        System.out.printf("\n%20s  >>  %-25s : %s", "main", "Freights", methodsPool.arrListToString(freights));
         System.out.printf("\n%20s  >>  %-25s : max = %d", "main", "Freights capacity", freights.get(0).getmaxCapacity());
-        System.out.printf("\n%20s  >>  %-25s : ", "main", "SupplierThreads");
-        for(int i = 0; i < supplierThreads.size(); i++) {
-            System.out.print(supplierThreads.get(i).getSupplierName());
-            if (i < supplierThreads.size() - 1) System.out.print(", ");
-        }
+        System.out.printf("\n%20s  >>  %-25s : %s", "main", "SupplierThreads", methodsPool.arrListToString(supplierThreads));
         System.out.printf("\n%20s  >>  %-25s : min = %-3d, max = %-3d", "main", "Daily supply", supplierThreads.get(0).getMinSupplier(), supplierThreads.get(0).getMaxSupplier());
-        System.out.printf("\n%20s  >>  %-25s : ", "main", "FactoryThreads");
-        for(int i = 0; i < factoryThreads.size(); i++) {
-            System.out.print(factoryThreads.get(i).getFactoryName());
-            if (i < factoryThreads.size() - 1) System.out.print(", ");
-        }
+        System.out.printf("\n%20s  >>  %-25s : %s", "main", "FactoryThreads", methodsPool.arrListToString(factoryThreads));
         System.out.printf("\n%20s  >>  %-25s : max = %-3d", "main", "Daily production", factoryThreads.get(0).getFactoryMaxProd());
         System.out.printf("\n%20s  >>  \n", "main");
 
-        App mainApp = new App();
         mainApp.runSimulation(inDay, warehouses, freights, supplierThreads, factoryThreads);
 
         keyIn.close();
@@ -123,7 +107,7 @@ public class App {
         CyclicBarrier FactoryBarrier = new CyclicBarrier(factoryThreads.size());
         
         for (int a = 1; a < inDay + 1; a++) {
-            classesPool.printBalance(a, warehouses, freights);
+            methodsPool.printBalance(a, warehouses, freights);
 
             
             ArrayList<Thread> supplierThreadInstances = new ArrayList<>();

@@ -3,7 +3,20 @@ package project2;
 import java.util.ArrayList;
 import java.util.concurrent.*;
 
-interface classesPool {
+interface methodsPool {
+    public static String arrListToString(ArrayList<?> inArr) {
+        String[] returnArr = new String[inArr.size()];
+        for (int i = 0; i < inArr.size(); i++) {
+            Object obj = inArr.get(i);
+            try {
+                returnArr[i] = (String) obj.getClass().getMethod("getName").invoke(obj);
+            } catch (Exception e) {
+                returnArr[i] = "";
+            }
+        }
+        return "[" + String.join(", ", returnArr) + "]";
+    }
+
     public static void printBalance(int goingDay, ArrayList<Warehouse> warehouseList, ArrayList<Freight> freightsList) {
         System.out.printf("%20s  >>  \n", "main");
         System.out.printf("%20s  >>  ====================================================\n", "main");
@@ -132,6 +145,10 @@ class SupplierThread implements Runnable{
         supplierMax = inMax;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public void setSupplierSemaphore(Semaphore inSem){
         sem = inSem;
     }
@@ -178,6 +195,10 @@ class FactoryThread implements Runnable{
     private ArrayList<Freight> freightList;
     private Semaphore sem = null;
     private CyclicBarrier barrier = null;
+
+    public String getName() {
+        return name;
+    }
     
     public FactoryThread(String inName, int inMaxProd) {
         name = inName;
