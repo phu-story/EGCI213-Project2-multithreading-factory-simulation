@@ -59,8 +59,6 @@ class Warehouse {
         } finally {
             sem.release();
         }
-
-        finalAmount += takingInMat;
     }
 
     public int getMaterial(int inGet) {
@@ -79,6 +77,7 @@ class Warehouse {
         } finally {
             sem.release();
         }
+        finalAmount += inGet;
         return inGet;
     }
 }
@@ -87,8 +86,9 @@ class Freight {
     protected String name;
     protected int maxCap;
     private int holdingUnit = 0;
-    private static Semaphore sem = null;
-    private int unShippedUnit = 0;
+    private Semaphore sem = null;
+    private int unShipUnit = 0;
+    // private static int unShippedUnit = 0;
 
     public Freight(String inName, int inCap, Semaphore inSem) {
         name = inName;
@@ -106,15 +106,20 @@ class Freight {
 
     public void resetFreight() {
         holdingUnit = 0;
-        unShippedUnit = 0;
+        unShipUnit = 0;
     }
+
+    // public int getUnShipped() {
+    //     return unShippedUnit;
+    // }
 
     public int freightShip(int takingIn) {
         try {
             sem.acquire();
             if (holdingUnit + takingIn >= maxCap) {
                 int shipped = maxCap - holdingUnit;
-                unShippedUnit = takingIn - shipped;
+                unShipUnit = takingIn - shipped;
+                // unShippedUnit += (takingIn - shipped);
                 holdingUnit = maxCap;
                 System.out.printf("ship %5d meterials %13s remaining capacity = %5d\n", shipped, name, (maxCap - holdingUnit));
             } else {
@@ -127,7 +132,7 @@ class Freight {
         } finally {
             sem.release();
         }
-        return unShippedUnit;
+        return unShipUnit;
     }
 }
 
@@ -191,6 +196,8 @@ class SupplierThread implements Runnable{
 class FactoryThread implements Runnable{
     protected String name;
     protected int maxProd;
+    private int unShippedUnit = 0;
+    private int producedUnit = 0;
     private ArrayList<Warehouse> warehouseList;
     private ArrayList<Freight> freightList;
     private Semaphore sem = null;
@@ -228,6 +235,14 @@ class FactoryThread implements Runnable{
         return maxProd;
     }
 
+    public int getUnShippedUnit() {
+        return unShippedUnit;
+    }
+
+    public int getProducedUnit() {
+        return producedUnit;
+    }
+
     public void run() {
         double rand = Math.random();
         int holdingMaterial = 0;
@@ -259,6 +274,7 @@ class FactoryThread implements Runnable{
             sem.acquire();
             System.out.printf("%20s  >>  ", name);
             unShipped = freightList.get((int) (rand * freightList.size())).freightShip(holdingMaterial);
+            producedUnit += holdingMaterial;
         } catch(InterruptedException | BrokenBarrierException e) { // 
             System.err.println(e);
         } finally {
@@ -268,6 +284,7 @@ class FactoryThread implements Runnable{
         try{
             Thread.sleep(5);
             System.out.printf("%20s  >>  unshipped product = %5d\n", name, unShipped);
+            unShippedUnit += unShipped;
         } catch(InterruptedException e) {
             System.err.println(e);
         }

@@ -149,6 +149,29 @@ public class App {
                 Thread.currentThread().interrupt();
             }
         }
+
+        System.out.printf("%20s  >>  \n", "main");
+        System.out.printf("%20s  >>  ==================== Summary ====================\n", "main");
+        for(int i = 0; i < factoryThreads.size(); i++) {
+            int produced  = factoryThreads.get(i).getProducedUnit();
+            int unshipped = factoryThreads.get(i).getUnShippedUnit();
+            int shipped   = produced - unshipped;
+
+            int percent;
+            if (produced == 0) {
+                percent = 0;
+            } else {
+                percent = (int) Math.round((shipped * 100.0) / produced);
+                percent = Math.max(0, Math.min(100, percent));
+            }
+
+            System.out.printf("%20s  >>  %-15s  Total product = %5d\tshipped = %5d (%3d%%)%n",
+                    "main",
+                    factoryThreads.get(i).getName(),
+                    produced,
+                    shipped,   // <-- use the shipped variable here
+                    percent);
+        }
     }
 
 }
